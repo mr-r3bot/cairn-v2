@@ -133,3 +133,44 @@ def test_codex_driver_execute_argv_passes_model_endpoint_and_prompt() -> None:
     assert "gpt-test" in argv
     assert 'model_providers.cairn.base_url="http://api/v1"' in argv
     assert argv[-2:] == ["--", "prompt"]
+
+
+def test_verification_only_config_allows_empty_workers(tmp_path) -> None:
+    """v2: claim projects run on the deterministic pipeline — no LLM workers needed."""
+    import yaml
+
+    config_path = tmp_path / "dispatch.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "server": "http://127.0.0.1:8000",
+                "runtime": {
+                    "interval": 5,
+                    "max_workers": 4,
+                    "max_running_projects": 2,
+                    "max_project_workers": 2,
+                    "healthcheck_timeout": 20,
+                    "worker_healthcheck": "disabled",
+                    "prompt_group": "mock",
+                    "execution": "local",
+                },
+                "tasks": {
+                    "bootstrap": {"timeout": 300, "conclude_timeout": 90},
+                    "reason": {"timeout": 300, "max_intents": 2},
+                    "explore": {"timeout": 300, "conclude_timeout": 90},
+                },
+                "workers": [],
+                "verification": {"enabled": True},
+            }
+        )
+    )
+    config = DispatchConfig.load(config_path)
+    assert config.workers == []
+    assert config.verification.enabled is True
+
+    # with verification disabled, v1 behaviour stands: workers are required
+    data = yaml.safe_load(config_path.read_text())
+    data["verification"] = {"enabled": False}
+    (tmp_path / "bare.yaml").write_text(yaml.safe_dump(data))
+    with pytest.raises(Exception, match="workers must not be empty"):
+        DispatchConfig.load(tmp_path / "bare.yaml")

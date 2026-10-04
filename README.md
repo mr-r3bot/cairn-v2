@@ -134,15 +134,23 @@ Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
  
 - macOS or Linux
 - Python ≥ 3.12
-- Docker (container execution only — not needed for local mode)
+- Docker (container execution; also the **v2 verification sandbox** — PoC
+  verification always runs containerized, local mode does not change that)
 
 
 ### Pull required images
  
-Both setup methods require the worker container image:
- 
+LLM hunt tasks (v1) need the worker container image:
+
 ```bash
 docker pull --platform=linux/amd64 ghcr.io/oritera/cairn-worker-container:latest
+```
+
+**v2 verification** additionally uses three small helper images (PoC sandbox,
+compose/build driver, clone driver):
+
+```bash
+docker pull python:3.13-slim docker:cli alpine/git
 ```
 
 Create your local dispatcher configuration and fill in your LLM endpoints and API keys:
@@ -150,33 +158,79 @@ Create your local dispatcher configuration and fill in your LLM endpoints and AP
 ```bash
 cp dispatch.example.yaml dispatch.yaml
 ```
- 
+
+The `verification:` section at the bottom is optional — the defaults fit a
+dispatcher running directly on the host.
+
 ### Docker Compose (recommended)
- 
+
 Pull the base image used to build Cairn:
- 
+
 ```bash
 docker pull ghcr.io/astral-sh/uv:python3.13-trixie
 ```
- 
+
+**New in v2:** the dispatcher shares `./datas/cairn` with the server, and the
+sandbox needs the *host-side* path of that directory (the Docker daemon, not
+the dispatcher, resolves bind-mount sources). Create a `.env` next to
+`docker-compose.yaml`:
+
+```bash
+echo "CAIRN_HOST_DATA=$(pwd)/datas/cairn" > .env
+```
+
 ```bash
 docker compose up --build
 ```
- 
-This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the server passes its health check. The dispatcher mounts `dispatch.yaml` from the project root and connects to Docker via the host socket. Data is persisted to `./datas/cairn/`.
- 
+
+This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the
+server passes its health check. The dispatcher mounts `dispatch.yaml` from
+the project root and connects to Docker via the host socket. Data is
+persisted to `./datas/cairn/`. Consoles: the v1 graph console on `/` and the
+**v2 verification console on `/verify`**.
+
+Rootless-Docker hosts: change the dispatcher's socket mount to your
+rootless socket (e.g. `/run/user/<uid>/docker.sock`) and export
+`DOCKER_HOST` accordingly.
+
 ### Manual
- 
+
 ```bash
 # Start the server
 uv run --project cairn cairn serve
  
 # Run the dispatcher
 uv run --project cairn cairn dispatch --config dispatch.yaml
- 
+
 # Run startup health checks only
 uv run --project cairn cairn dispatch --config dispatch.yaml --startup-healthcheck-only
 ```
+
+Unchanged from v1 — when the dispatcher runs directly on the host, the
+`verification:` section needs no `host_data_home` (dispatcher and daemon see
+the same paths). New in v2: the full-auto entrypoint
+`uv run --project cairn cairn auto --claim finding.json` (see the v2 section
+below).
+
+### Verification-only deployment (v2)
+
+PoC verification runs on a deterministic pipeline — it needs **no LLM
+workers and no API keys**. A minimal `dispatch.yaml`:
+
+```yaml
+server: "http://127.0.0.1:8000"
+runtime: {interval: 5, max_workers: 4, max_running_projects: 2, max_project_workers: 2, healthcheck_timeout: 20, worker_healthcheck: "disabled", prompt_group: "default"}
+tasks:
+  bootstrap: {timeout: 300, conclude_timeout: 90}
+  reason: {timeout: 300, max_intents: 2}
+  explore: {timeout: 300, conclude_timeout: 90}
+workers: []          # allowed because verification is enabled
+verification:
+  enabled: true
+```
+
+Start the server, start the dispatcher, then `POST /claims` (or run
+`cairn auto`) and watch `/verify`.
 
 ### Local mode (no Docker)
 
@@ -192,7 +246,7 @@ uv run --project cairn cairn serve
 uv run --project cairn cairn dispatch --config dispatch.yaml
 ```
 
-Local mode is selected by `runtime.execution: local` (see `dispatch.local.example.yaml`). On startup the dispatcher checks each configured worker CLI is installed and runnable, and reminds you they must already be logged in. Each project gets an isolated working directory under `local.workspace_root` (default: the dispatcher's current directory). Run the dispatcher directly on the host — not inside Docker — since the agents run with your user's permissions and no sandbox.
+Local mode is selected by `runtime.execution: local` (see `dispatch.local.example.yaml`). On startup the dispatcher checks each configured worker CLI is installed and runnable, and reminds you they must already be logged in. Each project gets an isolated working directory under `local.workspace_root` (default: the dispatcher's current directory). Run the dispatcher directly on the host — not inside Docker — since the agents run with your user's permissions and no sandbox. **v2 note:** local mode only changes how *workers* run; PoC verification always goes through the Docker sandbox — that is the product, not a wrapper.
 
 ### Tests
 

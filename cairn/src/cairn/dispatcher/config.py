@@ -254,8 +254,10 @@ class DispatchConfig(BaseModel):
         names = [worker.name for worker in self.workers]
         if len(set(names)) != len(names):
             raise ValueError("worker names must be unique")
-        if not self.workers:
-            raise ValueError("workers must not be empty")
+        if not self.workers and not self.verification.enabled:
+            # verification-only deployments (no LLM workers, no API keys)
+            # are legal: claim projects run on the deterministic pipeline
+            raise ValueError("workers must not be empty unless verification is enabled")
         if self.runtime.max_project_workers > self.runtime.max_workers:
             raise ValueError("max_project_workers cannot exceed max_workers")
         return self
