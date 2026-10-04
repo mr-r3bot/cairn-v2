@@ -6,6 +6,7 @@ import io
 import json
 import tarfile
 import time
+from pathlib import Path
 
 import pytest
 
@@ -112,18 +113,34 @@ def test_sanitize_run_ids() -> None:
 
 
 def test_manager_paths_are_per_run(tmp_path) -> None:
-    manager = SandboxManager(SandboxConfig(scratch_root=tmp_path / "s", hits_root=tmp_path / "h"))
+    manager = SandboxManager(SandboxConfig(data_home=tmp_path / "d"))
     assert manager.network_name("r1") == "cairn-sbxnet-r1"
     assert manager.collector_name("r1") == "cairn-sbxcollector-r1"
     scratch = manager.scratch_dir("r1")
-    assert scratch == tmp_path / "s" / "r1"
+    assert scratch == tmp_path / "d" / "sandbox" / "scratch" / "r1"
     assert scratch.exists()
-    assert manager.hits_path("r1") == tmp_path / "h" / "r1"
+    assert manager.hits_path("r1") == tmp_path / "d" / "sandbox" / "collector" / "r1"
     assert manager.collector_url() == "http://collector:9931"
 
 
+def test_host_path_translation_for_containerized_dispatcher(tmp_path) -> None:
+    cfg_same = SandboxConfig(data_home=tmp_path / "d")
+    assert cfg_same.host_path(tmp_path / "d" / "sandbox" / "scratch" / "r1") == (
+        tmp_path / "d" / "sandbox" / "scratch" / "r1"
+    )
+    cfg_docker = SandboxConfig(
+        data_home=Path("/root/.local/share/cairn"),
+        host_data_home=Path("/srv/cairn/datas/cairn"),
+    )
+    assert cfg_docker.host_path(
+        Path("/root/.local/share/cairn/sandbox/scratch/r1")
+    ) == Path("/srv/cairn/datas/cairn/sandbox/scratch/r1")
+    # paths outside data_home pass through untouched
+    assert cfg_docker.host_path(Path("/etc/passwd")) == Path("/etc/passwd")
+
+
 def test_wait_for_nonce_polls_until_hit_lands(tmp_path, monkeypatch) -> None:
-    manager = SandboxManager(SandboxConfig(hits_root=tmp_path))
+    manager = SandboxManager(SandboxConfig(data_home=tmp_path))
     hits_path = manager.hits_path("r1")
     hits_path.parent.mkdir(parents=True, exist_ok=True)
     hits_path.write_text("")

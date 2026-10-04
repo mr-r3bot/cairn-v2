@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from cairn import __version__
 from cairn.server import db
-from cairn.server.routers import claims, export, hints, intents, projects, settings
+from cairn.server.routers import claims, export, hints, intents, projects, settings, verification
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -28,6 +28,7 @@ app = FastAPI(
 app.include_router(settings.router)
 app.include_router(projects.router)
 app.include_router(claims.router)
+app.include_router(verification.router)
 app.include_router(hints.router)
 app.include_router(intents.router)
 app.include_router(export.router)
@@ -36,6 +37,12 @@ app.include_router(export.router)
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/verify", include_in_schema=False)
+def verify_console():
+    """Cairn v2 verification console (worklist + single-run views)."""
+    return FileResponse(STATIC_DIR / "verify.html")
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

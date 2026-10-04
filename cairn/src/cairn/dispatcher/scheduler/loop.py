@@ -22,6 +22,8 @@ from cairn.dispatcher.workers.registry import get_driver
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
 from cairn.dispatcher.tasks.explore import run_explore_task
 from cairn.dispatcher.tasks.reason import run_reason_task
+from cairn.sandbox.manager import SandboxManager
+from cairn.verification.pipeline import ServerGateway, VerificationPipeline
 from cairn.server.models import Intent, ProjectDetail, ProjectSummary
 
 LOG = logging.getLogger(__name__)
@@ -58,6 +60,9 @@ class DispatcherLoop:
         self.runtime_project_ids: set[str] = set()
         self.worker_unhealthy_until: dict[str, float] = {}
         self.worker_rejected_until: dict[tuple[str, str, str], float] = {}
+        self.claim_project_ids: set[str] = set()
+        self._verification_pipeline: VerificationPipeline | None = None
+        self._verification_state_registered = False
         self._log_state: dict[str, tuple[int, str, tuple[object, ...]]] = {}
         self._cleanup_pending: set[str] = set()
         self._inactive_cleanup_done: dict[str, str] = {}
@@ -75,6 +80,8 @@ class DispatcherLoop:
         self.executor.shutdown(wait=True)
         self.cleanup_executor.shutdown(wait=True)
         self.container_manager.close()
+        if self._verification_pipeline is not None:
+            self._verification_pipeline.sandbox.close()
         self.client.close()
 
     def run(self, once: bool = False) -> None:
@@ -85,6 +92,8 @@ class DispatcherLoop:
                     if not self._settings_checked:
                         self._validate_server_settings()
                         self._settings_checked = True
+                    self._register_verification_state()
+                    self._refresh_claim_projects()
                     self._reap_futures()
                     self._reap_cleanup_futures()
                     summaries = self.client.list_projects()
@@ -283,6 +292,10 @@ class DispatcherLoop:
                 project.project.status,
             )
             return False
+        if summary.id in self.claim_project_ids:
+            # verification runs walk their own deterministic spine; the
+            # bootstrap/reason/explore machinery never touches claim projects
+            return self._dispatch_verification(project)
         if self._is_initial_project(project):
             if project.project.reason is not None:
                 return False
@@ -336,6 +349,96 @@ class DispatcherLoop:
             len(project.intents),
         )
         return False
+
+    # ------------------------------------------------------------------
+    # verification (claim projects)
+
+    def _refresh_claim_projects(self) -> None:
+        try:
+            overview = self.client.get_verification_overview()
+        except requests.RequestException as exc:
+            LOG.warning("failed to refresh claim projects: %s", exc)
+            return
+        pending = {
+            item["project_id"]
+            for item in overview.get("claims", [])
+            if item.get("project_status") == "active"
+        }
+        if pending != self.claim_project_ids:
+            if pending:
+                LOG.info("claim projects pending verification: %s", sorted(pending))
+            self.claim_project_ids = pending
+
+    def _register_verification_state(self) -> None:
+        if self._verification_state_registered:
+            return
+        self._verification_state_registered = True
+        if not self.config.verification.enabled:
+            self._post_verification_state(False, "verification disabled in dispatcher config")
+            return
+        try:
+            sandbox = SandboxManager(self.config.verification.sandbox)
+            sandbox.client.ping()
+        except Exception as exc:  # noqa: BLE001 - docker unavailability must not kill the dispatcher
+            LOG.error("verification sandbox unavailable: %s", exc)
+            self._post_verification_state(False, f"docker unavailable: {exc}")
+            return
+        self._post_verification_state(True, "docker-native sandbox ready")
+
+    def _post_verification_state(self, available: bool, note: str) -> None:
+        try:
+            self.client.register_verification_state(sandbox_available=available, note=note)
+        except requests.RequestException as exc:
+            LOG.warning("failed to register verification state: %s", exc)
+
+    def _ensure_verification_pipeline(self) -> VerificationPipeline | None:
+        if self._verification_pipeline is not None:
+            return self._verification_pipeline
+        if not self.config.verification.enabled:
+            return None
+        try:
+            sandbox = SandboxManager(self.config.verification.sandbox)
+            sandbox.client.ping()
+            session = requests.Session()
+            gateway = ServerGateway(session, self.config.server, timeout=60.0)
+            self._verification_pipeline = VerificationPipeline(
+                gateway, sandbox, self.config.verification
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOG.error("cannot build verification pipeline: %s", exc)
+            return None
+        return self._verification_pipeline
+
+    def _dispatch_verification(self, project: ProjectDetail) -> bool:
+        project_id = project.project.id
+        if any(
+            task.project_id == project_id and task.task_type == "verify"
+            for task in self.futures.values()
+        ):
+            return False
+        pipeline = self._ensure_verification_pipeline()
+        if pipeline is None:
+            return False
+        try:
+            future = self.executor.submit(self._run_verification_step, pipeline, project_id)
+        except Exception:
+            LOG.exception("failed to submit verification step project=%s", project_id)
+            return False
+        self.futures[future] = RunningTask(
+            project_id, "verify", "cairn.verify", TaskCancellation()
+        )
+        self.runtime_project_ids.add(project_id)
+        LOG.info("dispatched verification step project=%s", project_id)
+        return True
+
+    def _run_verification_step(self, pipeline: VerificationPipeline, project_id: str) -> str:
+        try:
+            summary = pipeline.step(project_id)
+            LOG.info("verification step done project=%s summary=%s", project_id, summary)
+        except Exception:  # noqa: BLE001 - one bad step must not kill the dispatcher
+            LOG.exception("verification step failed project=%s", project_id)
+            return f"verify-error:{project_id}"
+        return f"verify:{project_id}:{summary.get('action', '?')}"
 
     def _dispatch_initial_project(self, project: ProjectDetail) -> bool:
         intent = self._get_bootstrap_intent(project)

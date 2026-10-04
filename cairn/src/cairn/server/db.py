@@ -94,7 +94,43 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 
 INSERT OR IGNORE INTO counters (name, value) VALUES ('claim', 0);
+
+CREATE TABLE IF NOT EXISTS verdicts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    sub_reason TEXT,
+    marker TEXT,
+    oracle_id TEXT,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    duration_s REAL NOT NULL DEFAULT 0,
+    detail TEXT NOT NULL DEFAULT '',
+    evidence_dir TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS handbacks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+
+def evidence_root() -> Path:
+    """Evidence bundles live beside the database (shared volume with the dispatcher)."""
+    assert _db_path is not None
+    root = _db_path.parent / "evidence"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def configure(path: Path) -> None:

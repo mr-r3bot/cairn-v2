@@ -72,6 +72,20 @@ class CairnClient:
         response.raise_for_status()
         return response.text
 
+    def get_verification_overview(self) -> dict[str, Any]:
+        response = self._session().get(
+            self._url("/verification/overview"), timeout=self._timeout
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def register_verification_state(self, *, sandbox_available: bool, note: str = "") -> ApiResult:
+        return self._request_json(
+            "POST",
+            "/verification/system",
+            json={"sandbox_available": sandbox_available, "note": note},
+        )
+
     def heartbeat(self, project_id: str, intent_id: str, worker: str) -> ApiResult:
         return self._request_json(
             "POST",

@@ -133,6 +133,7 @@ class SandboxManager:
 
         hits = self.hits_path(run_id)
         hits.touch(exist_ok=True)
+        host_hits = self.config.host_path(hits)
 
         LOG.info("starting nonce collector run=%s hits=%s", run_id, hits)
         container = self.client.containers.run(
@@ -142,7 +143,7 @@ class SandboxManager:
             detach=True,
             read_only=True,
             tmpfs={"/tmp": "rw,size=8m"},
-            volumes={str(hits): {"bind": "/collector/hits.jsonl", "mode": "rw"}},
+            volumes={str(host_hits): {"bind": "/collector/hits.jsonl", "mode": "rw"}},
             cap_drop=["ALL"],
             security_opt=["no-new-privileges:true"],
             mem_limit="128m",
@@ -184,6 +185,7 @@ class SandboxManager:
         """Execute an untrusted payload inside the sandbox and report the outcome."""
         timeout = timeout_s or self.config.payload_timeout_s
         scratch = self.scratch_dir(run_id)
+        host_scratch = self.config.host_path(scratch)
         network = self.ensure_network(run_id)
 
         merged_env = {
@@ -202,7 +204,7 @@ class SandboxManager:
             detach=True,
             network=network.name,
             read_only=True,
-            volumes={str(scratch): {"bind": _SCRATCH_MOUNT, "mode": "rw"}},
+            volumes={str(host_scratch): {"bind": _SCRATCH_MOUNT, "mode": "rw"}},
             tmpfs={"/tmp": "rw,size=64m"},
             cap_drop=["ALL"],
             security_opt=["no-new-privileges:true"],

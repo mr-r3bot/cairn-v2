@@ -65,3 +65,53 @@ def dispatch(config_path: Path, once: bool, startup_healthcheck_only: bool, log_
         loop.run(once=once)
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+@main.command()
+@click.option(
+    "--claim",
+    "claim_path",
+    type=click.Path(exists=True, dir_okay=False),
+    required=True,
+    help="Path to the untrusted Strix claim JSON",
+)
+@click.option("--server", default="http://127.0.0.1:8000", show_default=True, help="Cairn server URL")
+@click.option("--timeout", default=1800, show_default=True, help="Seconds to wait for a verdict")
+@click.option("--poll", default=3.0, show_default=True, help="Poll interval in seconds")
+@click.option(
+    "--allow-no-sandbox",
+    is_flag=True,
+    help="Override the sandbox guard (NOT recommended — attacker code without containment)",
+)
+def auto(claim_path: str, server: str, timeout: int, poll: float, allow_no_sandbox: bool):
+    """Full-auto verification: claim JSON in, verdict + exit code out.
+
+    Exit codes: 1 reproduced (CI fails on a confirmed live vuln), 0 any
+    other terminal verdict, 2 operational failure.
+    """
+    import requests
+
+    from cairn.verification.auto import AutoError, AutoRunner
+
+    runner = AutoRunner(
+        requests.Session(),
+        server,
+        allow_no_sandbox=allow_no_sandbox,
+        timeout_s=timeout,
+        poll_s=poll,
+    )
+    try:
+        claim = AutoRunner.load_claim_file(claim_path)
+        runner.check_sandbox()
+        claim_id, project_id = runner.ingest(claim)
+        click.echo(f"claim {claim_id} ingested → project {project_id}; waiting for verdict…")
+        verdict = runner.wait_verdict(project_id)
+    except AutoError as exc:
+        click.echo(f"auto: {exc}", err=True)
+        raise SystemExit(2)
+
+    click.echo(f"verdict: {verdict['status'].upper()}" + (f" / {verdict['sub_reason']}" if verdict.get("sub_reason") else ""))
+    if verdict.get("marker"):
+        click.echo(f"marker {verdict['marker']} observed out-of-band")
+    click.echo(f"report: {server}/projects/{project_id}/report")
+    raise SystemExit(AutoRunner.exit_code(verdict))

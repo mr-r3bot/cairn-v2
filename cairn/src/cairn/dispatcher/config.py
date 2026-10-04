@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from decimal import Decimal, InvalidOperation
 import json
 from importlib import resources
@@ -8,6 +9,8 @@ from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from cairn.verification.config import VerificationConfig
 
 
 TaskType = Literal["reason", "explore", "bootstrap"]
@@ -214,6 +217,7 @@ class DispatchConfig(BaseModel):
     local: LocalConfig | None = None
     common_env: dict[str, str] = Field(default_factory=dict)
     workers: list[WorkerConfig]
+    verification: VerificationConfig = Field(default_factory=VerificationConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -275,8 +279,23 @@ class DispatchConfig(BaseModel):
     def load(cls, path: Path) -> "DispatchConfig":
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         config = cls.model_validate(data)
+        _expand_verification_paths(config)
         validate_prompt_resources(config.runtime.prompt_group)
         return config
+
+
+def _expand_verification_paths(config: DispatchConfig) -> None:
+    """Expand $VARs in verification paths (docker deployments inject host dirs via env)."""
+    sandbox = config.verification.sandbox
+    if sandbox.data_home is not None:
+        sandbox.data_home = Path(os.path.expandvars(str(sandbox.data_home)))
+    if sandbox.host_data_home is not None:
+        sandbox.host_data_home = Path(os.path.expandvars(str(sandbox.host_data_home)))
+    verification = config.verification
+    if verification.evidence_home is not None:
+        verification.evidence_home = Path(os.path.expandvars(str(verification.evidence_home)))
+    if verification.checkout_home is not None:
+        verification.checkout_home = Path(os.path.expandvars(str(verification.checkout_home)))
 
 
 def _validate_optional_positive_int_env(worker_name: str, env: dict[str, str], key: str) -> None:

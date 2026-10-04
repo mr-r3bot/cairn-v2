@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn v2 — Verification Console</title>
+<style>
+:root{
+  --ink:#0B1012; --panel:#131d20; --panel2:#0f181a; --well:#0C1416;
+  --line:#243034; --line-br:#37484E; --text:#DCE6E4; --muted:#8aa09b; --muted2:#7E918D; --faint:#52635E;
+  --live:#54D6C6; --repro:#F0603E; --clear:#48C98A; --incon:#E3A93C; --strix:#9A86F0;
+  --sans:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1100px 560px at 85% -12%,#101f1e 0,transparent 60%),var(--ink);
+  color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px}
+a{color:inherit;text-decoration:none}
+.mono{font-family:var(--mono)}
+h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
+.ey{font-size:12.5px;color:var(--muted2)}
+.sp{flex:1}
+/* top bar */
+.top{display:flex;align-items:center;gap:14px;padding:4px 2px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand b{font-weight:700;letter-spacing:.3px;font-size:19px}
+.brand .v{font-family:var(--mono);font-size:12px;color:var(--live);border:1px solid var(--line-br);padding:1px 6px;border-radius:5px;margin-left:8px}
+.run{color:var(--muted2);font-family:var(--mono);font-size:12.5px}
+.seg{display:flex;border:1px solid var(--line-br);border-radius:7px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--muted2);font-family:var(--sans);font-size:12.5px;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed=true]{background:#17262a;color:var(--text)}
+.btn{background:transparent;border:1px solid var(--line-br);color:var(--text);font-family:var(--sans);font-size:12.5px;padding:7px 12px;border-radius:7px;cursor:pointer;display:inline-block}
+.btn:hover{border-color:var(--live);color:#eafffb}
+.btn.go{border-color:#2d4b48;color:#bdfff4}
+/* panels */
+.panel{background:linear-gradient(180deg,#131d20,#0f181a);border:1px solid var(--line);border-radius:12px}
+.pad{padding:16px 18px}
+.grid{display:grid;grid-template-columns:1fr 320px;gap:20px;margin-top:20px}
+@media(max-width:920px){.grid{grid-template-columns:1fr}}
+/* claim card */
+.claim{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:flex-start}
+.claim .k{font-size:11.5px;color:var(--faint);margin-bottom:3px}
+.claim .val{font-family:var(--mono);font-size:13px;color:var(--text)}
+.tag{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;border:1px solid var(--line-br);border-radius:999px;padding:3px 10px}
+.tag .dot{width:7px;height:7px;border-radius:50%;background:var(--repro)}
+.src{margin-left:auto;font-size:12px;color:var(--muted2)}
+.src b{color:var(--live);font-weight:500}
+/* signal path */
+.hero{margin-top:20px}
+.rail{position:relative;display:grid;grid-template-columns:repeat(5,1fr);align-items:start;margin-top:6px}
+.wire{position:absolute;left:7%;right:7%;top:18px;height:2px;background:var(--line-br)}
+.wire .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2b6f68,var(--live));transition:width .5s}
+.node{display:flex;flex-direction:column;align-items:center;gap:11px;position:relative;z-index:2}
+.node .ring{width:38px;height:38px;border-radius:50%;background:var(--well);border:2px solid var(--line-br);display:grid;place-items:center;font-family:var(--mono);font-size:13px;color:var(--muted2)}
+.node .lbl{font-size:12.5px;color:var(--muted2);text-align:center}
+.node .sub{font-size:11px;color:var(--faint);font-family:var(--mono);height:16px;text-align:center}
+.node.done .ring{border-color:#2d6f67;color:var(--live);background:#0f201f}
+.node.done .lbl{color:var(--text)}
+.node.active .ring{border-color:var(--live);color:#eafffb;box-shadow:0 0 0 4px rgba(84,214,198,.12);animation:pulse 1.4s ease-in-out infinite}
+.node.active .lbl{color:#eafffb}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(84,214,198,.10)}50%{box-shadow:0 0 0 9px rgba(84,214,198,.02)}}
+@media(prefers-reduced-motion:reduce){.node.active .ring{animation:none}}
+/* verdict */
+.verdict{margin-top:20px;display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+@media(max-width:620px){.verdict{grid-template-columns:1fr}}
+.stamp{border:2px solid var(--faint);color:var(--faint);border-radius:12px;padding:16px 22px;text-align:center;min-width:220px}
+.stamp.reproduced{border-color:var(--repro);color:var(--repro);background:repeating-linear-gradient(135deg,rgba(240,96,62,.05) 0 10px,transparent 10px 20px)}
+.stamp.not_reproduced{border-color:var(--clear);color:var(--clear)}
+.stamp.inconclusive{border-color:var(--incon);color:var(--incon)}
+.stamp.pending{border-style:dashed}
+.stamp .big{font-size:26px;font-weight:700;letter-spacing:1px;line-height:1.1}
+.stamp .conf{margin-top:8px;font-family:var(--mono);font-size:11.5px;opacity:.85}
+.vmeta p{margin:0 0 7px;font-size:13.5px;color:var(--muted)}
+.vmeta b{color:var(--text);font-weight:500}
+.proof{font-family:var(--mono);font-size:12.5px;color:#bdfff4;background:#0f201f;border:1px solid #244b47;border-radius:7px;padding:8px 10px;display:inline-block;word-break:break-all}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted2);margin-top:14px}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px}
+/* evidence tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 8px;flex-wrap:wrap}
+.tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted2);font-family:var(--sans);font-size:13px;padding:11px 12px;cursor:pointer;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--live)}
+.tabpane{padding:16px 18px;font-family:var(--mono);font-size:12px;color:#c3d2cf;white-space:pre-wrap;line-height:1.6;max-height:420px;overflow:auto;word-break:break-word}
+.hide{display:none}
+/* side */
+.side{display:flex;flex-direction:column;gap:16px}
+.meter .row{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:9px;color:var(--muted)}
+.meter .row b{color:var(--text);font-weight:500;font-family:var(--mono)}
+.bar{height:6px;background:var(--well);border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#2b6f68,var(--live))}
+.bar.warn i{background:linear-gradient(90deg,#8a6a1e,var(--incon))}
+.feed{max-height:300px;overflow:auto}
+.ev{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.ev:last-child{border-bottom:0}
+.ev .t{font-family:var(--mono);color:var(--faint);font-size:11px;white-space:nowrap;padding-top:1px}
+.ev .d{color:var(--muted)}
+.ev .d b{color:var(--text);font-weight:500}
+.ev.fact .mark{color:var(--clear)}
+.ev.hint .d b{color:var(--incon)}
+.hintbox{display:flex;gap:8px;margin-top:12px}
+.hintbox input{flex:1;background:var(--well);border:1px solid var(--line-br);border-radius:7px;color:var(--text);font-family:var(--sans);font-size:13px;padding:8px 11px}
+.hintbox input:focus{outline:none;border-color:var(--live)}
+.note{font-size:11.5px;color:var(--faint);margin-top:10px;line-height:1.5}
+/* worklist */
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 20px}
+.chip{display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:linear-gradient(180deg,#121b1e,#0f181a);border-radius:10px;padding:10px 14px;cursor:pointer}
+.chip:hover{border-color:var(--line-br)}
+.chip .num{font-family:var(--mono);font-size:19px;color:var(--text)}
+.chip .cl{font-size:12px;color:var(--muted2)}
+.chip .dotc{width:8px;height:8px;border-radius:50%}
+.needs{border:1px solid var(--incon);border-radius:13px;background:linear-gradient(180deg,#1b1812,#13100b)}
+.needs .hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #3a2f16}
+.needs .hd .t{font-size:15px;font-weight:600}
+.needs .hd .c{font-family:var(--mono);font-size:12px;color:var(--incon);border:1px solid #5a4a1e;border-radius:20px;padding:1px 9px}
+.needs .hd .s{margin-left:auto;font-size:12px;color:var(--faint)}
+.needs .bd{padding:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:860px){.needs .bd{grid-template-columns:1fr}}
+.rc{background:var(--well);border:1px solid var(--line);border-radius:10px;padding:13px 14px}
+.rc .repo{font-family:var(--mono);font-size:12.5px;color:var(--text)}
+.rc .pill{border:1px solid var(--line-br);border-radius:20px;padding:0 7px;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:7px}
+.rc .goal{font-size:11.5px;color:var(--faint);margin-top:8px}
+.rc .why{font-size:12px;color:var(--incon);margin-top:7px;font-family:var(--mono)}
+.rc .why.hot{color:var(--repro)}
+.rc .act{margin-top:11px;display:flex;gap:7px;flex-wrap:wrap}
+.mini{font-family:var(--sans);font-size:11.5px;border:1px solid var(--line-br);background:transparent;color:var(--text);border-radius:6px;padding:4px 8px;cursor:pointer}
+.mini:hover{border-color:var(--live);color:#eafffb}
+.mini.warn:hover{border-color:var(--incon);color:#ffe9c2}
+.mini.key{border-color:#2d4b48;color:#bdfff4}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:980px){.board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.board{grid-template-columns:1fr}}
+.col{background:linear-gradient(180deg,#121b1e,#0f181a);border:1px solid var(--line);border-radius:11px;min-height:110px}
+.col h3{font-size:12.5px;font-weight:600;margin:0;padding:12px 13px 10px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.col h3 .n{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:0 7px;line-height:17px}
+.col .body{padding:10px;display:flex;flex-direction:column;gap:9px}
+.dotc2{width:8px;height:8px;border-radius:50%}
+.c-in .dotc2{background:var(--strix)} .c-run .dotc2{background:var(--live)}
+.c-rep .dotc2{background:var(--repro)} .c-clr .dotc2{background:var(--clear)} .c-inc .dotc2{background:var(--incon)}
+.card{background:var(--well);border:1px solid var(--line);border-radius:9px;padding:10px 11px;cursor:pointer}
+.card:hover{border-color:var(--line-br)}
+.card .repo{font-family:var(--mono);font-size:12px;color:var(--text)}
+.card .cls{font-size:11px;color:var(--muted2);margin-top:3px}
+.card .cls .pill{border:1px solid var(--line-br);border-radius:20px;padding:0 6px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.card .why{font-size:11px;color:var(--faint);margin-top:7px;font-family:var(--mono)}
+.card .act{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+.quiet{margin:16px 2px 0;font-size:12.5px;color:var(--faint);display:flex;align-items:center;gap:8px}
+.quiet i{width:9px;height:9px;border-radius:2px;background:var(--clear)}
+.foot{margin-top:26px;color:var(--faint);font-size:12px;text-align:center}
+.err{color:var(--repro);font-family:var(--mono);font-size:12.5px;padding:10px}
+</style>
+</head>
+<body>
+<div class="wrap" x-data="console()">
+
+  <div class="top">
+    <div class="brand"><b>Cairn</b><span class="v">v2</span></div>
+    <div class="run" x-show="run">verify/ <b x-text="run?.title || run?.project_id"></b></div>
+    <div class="sp"></div>
+    <div class="seg" role="group" aria-label="view">
+      <button :aria-pressed="!run" @click="openRun(null)">Worklist</button>
+      <button :aria-pressed="!!run" @click="run && openRun(run.project_id)">Run console</button>
+    </div>
+    <template x-if="run">
+      <div style="display:flex;gap:8px">
+        <a class="btn" :href="'/projects/'+run.project_id+'/report'" target="_blank">Export report</a>
+        <a class="btn" :href="'/projects/'+run.project_id+'/handback'" target="_blank" x-show="verdict && verdict.status!=='reproduced'">Handback</a>
+      </div>
+    </template>
+  </div>
+
+  <!-- ================= WORKLIST ================= -->
+  <template x-if="!run">
+    <div>
+      <p class="ey" style="margin:14px 0 0;max-width:76ch">Auto mode runs the loop unattended: Strix findings are ingested, verified against a
+      live sandboxed instance, and only the negatives reach you. The goal-met ones close on their own.</p>
+
+      <div class="chips">
+        <div class="chip"><span class="dotc" style="background:var(--strix)"></span><span class="num" x-text="counts.queued"></span><span class="cl">from Strix, not started</span></div>
+        <div class="chip"><span class="dotc" style="background:var(--live)"></span><span class="num" x-text="counts.verifying"></span><span class="cl">verifying now</span></div>
+        <div class="chip"><span class="dotc" style="background:var(--repro)"></span><span class="num" x-text="counts.reproduced"></span><span class="cl">reproduced — shipped</span></div>
+        <div class="chip"><span class="dotc" style="background:var(--clear)"></span><span class="num" x-text="counts.cleared"></span><span class="cl">not reproduced</span></div>
+      </div>
+
+      <div class="needs" x-show="counts.needs">
+        <div class="hd">
+          <span class="t">Needs you</span><span class="c" x-text="counts.needs"></span>
+          <span class="s">negative or unprovable results — Cairn won't ship these on its own</span>
+        </div>
+        <div class="bd">
+          <template x-for="c in negatives" :key="c.claim_id">
+            <div class="rc">
+              <div class="repo"><span x-text="c.target_repo"></span> <span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span></div>
+              <div class="goal">claim <span class="mono" x-text="c.claim_id"></span> · poc <span x-text="c.poc_type"></span></div>
+              <div class="why" :class="{hot: c.verdict_status==='not_reproduced'}"
+                   x-text="c.verdict_status ? (c.verdict_status==='not_reproduced' ? 'goal not met — '+(c.sub_reason||'effect never fired') : (c.sub_reason||'inconclusive')) : 'not finished yet'"></div>
+              <div class="act">
+                <button class="mini warn" @click="openRun(c.project_id)">Open run</button>
+                <a class="mini" :href="'/projects/'+c.project_id+'/handback'" target="_blank" x-show="c.verdict_status && c.verdict_status!=='reproduced'">Handback</a>
+                <a class="mini" :href="'/projects/'+c.project_id+'/report'" target="_blank" x-show="c.verdict_status">Report</a>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="board" style="margin-top:20px">
+        <div class="col c-in"><h3><span class="dotc2"></span>From Strix <span class="n" x-text="cols.inbox.length"></span></h3>
+          <div class="body"><template x-for="c in cols.inbox" :key="c.claim_id">
+            <div class="card" @click="openRun(c.project_id)">
+              <div class="repo" x-text="c.target_repo"></div>
+              <div class="cls"><span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span> <span x-text="c.target_commit?.slice(0,7)"></span></div>
+              <div class="act"><button class="mini key" @click.stop="openRun(c.project_id)">Verify</button></div>
+            </div></template></div></div>
+        <div class="col c-run"><h3><span class="dotc2"></span>Verifying <span class="n" x-text="cols.running.length"></span></h3>
+          <div class="body"><template x-for="c in cols.running" :key="c.claim_id">
+            <div class="card" @click="openRun(c.project_id)">
+              <div class="repo" x-text="c.target_repo"></div>
+              <div class="cls"><span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span> <span x-text="stageLabel(c)"></span></div>
+            </div></template></div></div>
+        <div class="col c-rep"><h3><span class="dotc2"></span>Reproduced <span class="n" x-text="cols.reproduced.length"></span></h3>
+          <div class="body"><template x-for="c in cols.reproduced" :key="c.claim_id">
+            <div class="card" @click="openRun(c.project_id)">
+              <div class="repo" x-text="c.target_repo"></div>
+              <div class="cls"><span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span> effect confirmed</div>
+              <div class="why" style="color:var(--repro)" x-show="c.marker" x-text="'marker '+(c.marker||'').slice(0,8)+'…'"></div>
+            </div></template></div></div>
+        <div class="col c-clr"><h3><span class="dotc2"></span>Not reproduced <span class="n" x-text="cols.cleared.length"></span></h3>
+          <div class="body"><template x-for="c in cols.cleared" :key="c.claim_id">
+            <div class="card" @click="openRun(c.project_id)">
+              <div class="repo" x-text="c.target_repo"></div>
+              <div class="cls"><span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span> effect never fired</div>
+            </div></template></div></div>
+        <div class="col c-inc"><h3><span class="dotc2"></span>Inconclusive <span class="n" x-text="cols.inconclusive.length"></span></h3>
+          <div class="body"><template x-for="c in cols.inconclusive" :key="c.claim_id">
+            <div class="card" @click="openRun(c.project_id)">
+              <div class="repo" x-text="c.target_repo"></div>
+              <div class="cls"><span class="pill" x-text="(c.vuln_class||'').toUpperCase()"></span> <span x-text="c.sub_reason||'—'"></span></div>
+            </div></template></div></div>
+      </div>
+
+      <div class="quiet"><i></i>Everything else — queued, verifying, and reproduced — moves without you. Cairn never writes its own PoC; negatives go back to Strix with a replay manifest.</div>
+    </div>
+  </template>
+
+  <!-- ================= RUN CONSOLE ================= -->
+  <template x-if="run">
+    <div>
+      <!-- CLAIM -->
+      <div class="panel pad" style="margin-top:20px">
+        <div class="claim">
+          <div><div class="k">Target</div><div class="val"><span x-text="claim?.target_repo"></span> @ <span style="color:var(--live)" x-text="claim?.target_commit?.slice(0,7)"></span></div></div>
+          <div x-show="bootStrategy"><div class="k">Bring-up (auto-discovered)</div><div class="val" x-text="bootStrategy"></div></div>
+          <div><div class="k">Finding</div><div class="val"><span x-text="claim?.claim_id"></span></div></div>
+          <div><div class="k">Class</div><div><span class="tag"><span class="dot"></span><span x-text="(claim?.vuln_class||'').toUpperCase()"></span></span></div></div>
+          <div><div class="k">PoC</div><div class="val"><span x-text="claim?.poc?.type"></span> · <span style="color:var(--faint)">payload sealed (<span x-text="claim?.poc_digest?.slice(0,14)"></span>…)</span></div></div>
+          <div class="src">claim from <b x-text="claim?.source"></b> — treated as unverified</div>
+        </div>
+      </div>
+
+      <!-- SIGNAL PATH -->
+      <div class="panel hero">
+        <div class="pad">
+          <div class="ey">Verification path</div>
+          <div class="rail">
+            <div class="wire"><div class="fill" :style="'width:'+progress"></div></div>
+            <template x-for="(s,i) in stages" :key="s.name">
+              <div class="node" :class="stageClass(i)">
+                <div class="ring" x-text="i<stageIndex ? '✓' : (i===stageIndex ? '◉' : '·')"></div>
+                <div class="lbl" x-text="s.name"></div>
+                <div class="sub" x-text="s.sub"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <!-- VERDICT -->
+          <div class="panel pad">
+            <div class="verdict">
+              <div class="stamp" :class="verdict ? verdict.status : 'pending'">
+                <div class="big" x-text="verdict ? verdict.status.replace('_',' ').toUpperCase() : 'PENDING'"></div>
+                <div class="conf" x-text="verdict ? (verdict.sub_reason || 'effect confirmed') : 'run in progress'"></div>
+              </div>
+              <div class="vmeta">
+                <p x-text="verdictMeta.head"></p>
+                <p><b>Oracle:</b> <span x-text="verdict?.oracle_id || oracleLabel"></span></p>
+                <p class="proof" x-show="verdict?.marker" x-text="'marker '+(verdict?.marker||'')+' → observed in collector out-of-band'"></p>
+                <p class="proof" x-show="!verdict">Strix's claimed success signal is never consulted — only a Cairn-chosen marker counts.</p>
+              </div>
+            </div>
+            <div class="legend">
+              <span><i style="background:var(--repro)"></i>Reproduced — effect proven</span>
+              <span><i style="background:var(--clear)"></i>Not reproduced — effect never fired</span>
+              <span><i style="background:var(--incon)"></i>Inconclusive — boot/PoC/oracle unclear</span>
+            </div>
+          </div>
+
+          <!-- EVIDENCE -->
+          <div class="panel" style="margin-top:16px">
+            <div class="tabs" role="tablist">
+              <template x-for="t in tabs" :key="t.id">
+                <button role="tab" :aria-selected="tab===t.id" @click="tab=t.id; loadTab(t)" x-text="t.label"></button>
+              </template>
+            </div>
+            <div class="tabpane" x-text="tabContent" :class="tabError ? 'err' : ''"></div>
+          </div>
+        </div>
+
+        <!-- SIDE -->
+        <div class="side">
+          <div class="panel pad">
+            <h2 class="sec">Budget</h2>
+            <div class="ey" style="margin-bottom:12px">hard cap — run pauses on breach</div>
+            <template x-if="budget">
+              <div>
+                <div class="meter">
+                  <div class="row"><span>Wall clock</span><b x-text="budget.elapsed_s+'s / '+budget.wall_clock_cap_s+'s'"></b></div>
+                  <div class="bar" :class="{warn: budget.elapsed_s/budget.wall_clock_cap_s > .7}"><i :style="'width:'+Math.min(100,budget.elapsed_s/budget.wall_clock_cap_s*100)+'%'"></i></div>
+                  <div class="row" style="margin-top:12px"><span>Payload runs</span><b x-text="budget.payload_runs+' / '+budget.max_payload_runs"></b></div>
+                  <div class="bar"><i :style="'width:'+Math.min(100,budget.payload_runs/budget.max_payload_runs*100)+'%'"></i></div>
+                  <div class="row" style="margin-top:12px"><span>Cost</span><b x-text="'$'+(budget.cost_usd??0).toFixed(2)+' / $'+budget.max_cost_usd.toFixed(2)"></b></div>
+                  <div class="bar"><i :style="'width:'+Math.min(100,(budget.cost_usd??0)/budget.max_cost_usd*100)+'%'"></i></div>
+                </div>
+              </div>
+            </template>
+            <p class="ey" x-show="!budget">no budget data until the first stage completes</p>
+          </div>
+
+          <div class="panel pad">
+            <h2 class="sec">Activity</h2>
+            <div class="ey" style="margin-bottom:8px">Facts appended to the board</div>
+            <div class="feed">
+              <template x-for="ev in events" :key="ev.id">
+                <div class="ev" :class="ev.kind"><span class="t" x-text="ev.time"></span>
+                  <span class="d"><span class="mark" x-show="ev.kind==='fact'">●</span> <b x-text="ev.title"></b> — <span x-text="ev.detail"></span></span></div>
+              </template>
+              <p class="ey" x-show="!events.length">waiting for facts…</p>
+            </div>
+            <div class="hintbox">
+              <input x-ref="hint" placeholder="Add a hint (steer the run)…" aria-label="Add a hint" @keydown.enter="sendHint">
+              <button class="btn" @click="sendHint">Send</button>
+            </div>
+            <div class="note">The hint box is the only control that writes to the run. Everything else is read-only — the console observes, the dispatcher writes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <div class="foot">Cairn v2 — verification console · verdicts are conservative: anything unproven stays inconclusive · <a href="/" style="text-decoration:underline">v1 graph console</a></div>
+</div>
+
+<script src="/static/vendor/alpine.min.js" defer></script>
+<script>
+function console(){
+  return {
+    overview: [], run: null, claim: null, project: null, verdict: null,
+    events: [], tab: 'obs', tabContent: '', tabError: false, budget: null,
+    manifest: null, boot: null, pocOut: null, observation: null,
+    timer: null,
+    tabs: [
+      {id:'obs', label:'Observation', file:'observation.json'},
+      {id:'boot', label:'Boot recipe', file:'boot.json'},
+      {id:'log', label:'PoC output', file:'poc_output.json'},
+      {id:'hits', label:'Collector', file:'collector_hits.json'},
+      {id:'man', label:'Replay manifest', file:'replay_manifest.json'},
+    ],
+
+    async init(){
+      const q = new URLSearchParams(location.search).get('project');
+      await this.refreshOverview();
+      if (q) this.openRun(q); else this.startPolling();
+    },
+
+    get counts(){
+      const c = {queued:0, verifying:0, reproduced:0, cleared:0, needs:0};
+      for (const item of this.overview){
+        if (item.verdict_status === 'reproduced') c.reproduced++;
+        else if (item.verdict_status === 'not_reproduced'){ c.cleared++; c.needs++; }
+        else if (item.verdict_status){ c.needs++; }
+        else if (item.project_status === 'active') c.verifying++;
+        else c.queued++;
+      }
+      return c;
+    },
+    get negatives(){
+      return this.overview.filter(c => c.verdict_status && c.verdict_status !== 'reproduced');
+    },
+    get cols(){
+      const inbox = [], running = [], reproduced = [], cleared = [], inconclusive = [];
+      for (const c of this.overview){
+        if (c.verdict_status === 'reproduced') reproduced.push(c);
+        else if (c.verdict_status === 'not_reproduced') cleared.push(c);
+        else if (c.verdict_status) inconclusive.push(c);
+        else if (c.project_status === 'active') running.push(c);
+        else inbox.push(c);
+      }
+      return {inbox, running, reproduced, cleared, inconclusive};
+    },
+    stageLabel(c){
+      const f = c.last_fact || '';
+      if (f.startsWith('VERDICT')) return 'verdict';
+      if (f.startsWith('EFFECT') || f.startsWith('ORACLE')) return 'observing';
+      if (f.startsWith('EXECUTE')) return 'executing PoC';
+      if (f.startsWith('BRING-UP OK')) return 'booted';
+      if (f.startsWith('BRING-UP FAILED')) return 'boot failed';
+      return 'starting';
+    },
+
+    // ---------------- run console ----------------
+    get stages(){
+      const f = (prefix) => this.project?.facts?.find(x => x.description.startsWith(prefix))?.description || '';
+      return [
+        {name:'Ingest', sub:'claim parsed'},
+        {name:'Bring-up', sub: (()=>{const d=f('BRING-UP'); if(!d) return ''; return d.includes('OK') ? (this.boot?.endpoint||'healthy') : (d.includes('FAILED')?'failed':'…');})()},
+        {name:'Execute', sub: (()=>{const d=f('EXECUTE'); if(!d) return ''; return d.includes('clean') ? 'PoC sent' : 'PoC error';})()},
+        {name:'Observe', sub: (()=>{const d=f('EFFECT')||f('ORACLE'); if(!d) return ''; return d.startsWith('EFFECT CONFIRMED') ? 'EFFECT CONFIRMED' : (d.startsWith('EFFECT NOT') ? 'no effect' : 'ambiguous');})()},
+        {name:'Verdict', sub: this.verdict ? this.verdict.status : ''},
+      ];
+    },
+    get stageIndex(){
+      const facts = this.project?.facts || [];
+      const has = p => facts.some(f => f.description.startsWith(p));
+      if (this.verdict) return 5;
+      if (has('EFFECT') || has('ORACLE AMBIGUOUS')) return 4;
+      if (has('EXECUTE')) return 3;
+      if (has('BRING-UP')) return 2;
+      return 1;
+    },
+    get progress(){ return (this.stageIndex/5*100).toFixed(0)+'%'; },
+    stageClass(i){
+      if (i < this.stageIndex) return 'done';
+      if (i === this.stageIndex) return this.verdict ? 'done' : 'active';
+      return '';
+    },
+    get bootStrategy(){
+      if (!this.boot) return null;
+      return this.boot.strategy ? (this.boot.strategy + ' · ' + (this.boot.endpoint||'')) : null;
+    },
+    get oracleLabel(){
+      const v = this.observation;
+      return v ? (v.id + ' — ' + (v.reason||'')) : 'armed at execute time';
+    },
+    get verdictMeta(){
+      if (!this.verdict) return {head: 'Cairn is walking the verification path against a live sandboxed instance.'};
+      const v = this.verdict;
+      if (v.status === 'reproduced') return {head: 'Cairn independently achieved the claimed effect inside the sandbox — not a signal relayed from Strix.'};
+      if (v.status === 'not_reproduced') return {head: 'Target booted, PoC ran clean, the effect never fired. Handed back to Strix with a replay manifest.'};
+      return {head: v.detail || 'Unproven — stays inconclusive.'};
+    },
+
+    async openRun(pid){
+      this.run = null; this.verdict=null; this.claim=null; this.project=null; this.events=[]; this.budget=null;
+      this.manifest=null; this.boot=null; this.pocOut=null; this.observation=null; this.tabContent='';
+      history.replaceState(null,'', pid ? '?project='+pid : location.pathname);
+      if (!pid){ this.refreshOverview(); this.startPolling(); return; }
+      await this.refreshRun();
+      this.startPolling();
+    },
+    async refreshRun(){
+      if (!this.run && !new URLSearchParams(location.search).get('project')) return;
+      const pid = this.run?.project_id || new URLSearchParams(location.search).get('project');
+      if (!pid) return;
+      try{
+        const [project, claim] = await Promise.all([
+          fetch('/projects/'+pid).then(r => r.ok ? r.json() : null),
+          fetch('/projects/'+pid+'/claim').then(r => r.ok ? r.json() : null),
+        ]);
+        if (!project){ this.run = null; return; }
+        this.run = project.project; this.project = project; this.claim = claim;
+        const vr = await fetch('/projects/'+pid+'/verdict');
+        this.verdict = vr.ok ? await vr.json() : null;
+        await Promise.all([this.loadEvents(), this.loadEvidence()]);
+        if (this.verdict) this.loadTab(this.tabs.find(t=>t.id===this.tab) || this.tabs[0]);
+      }catch(e){ this.tabContent = 'refresh failed: '+e; this.tabError = true; }
+    },
+    async loadEvents(){
+      const pid = this.run.project_id;
+      const facts = this.project.facts || [];
+      const evs = [];
+      for (const f of facts){
+        const d = f.description;
+        let title = 'fact', detail = d;
+        const cut = d.indexOf(' — ');
+        if (cut > 0){ title = d.slice(0, cut); detail = d.slice(cut+3); }
+        else if (d.startsWith('[claim ')){ title = 'claim ingested'; }
+        else if (d.startsWith('[goal') || d.includes('independent verdict')){ continue; }
+        evs.push({id: f.id, kind: 'fact', time: '', title, detail: detail.slice(0,160)});
+      }
+      for (const h of this.project.hints || [])
+        evs.push({id: 'h'+h.id, kind:'hint', time:'', title:'hint', detail: h.content});
+      this.events = evs.slice().reverse();
+    },
+    async loadEvidence(){
+      const pid = this.run.project_id;
+      const get = async (name) => { const r = await fetch(`/projects/${pid}/evidence/${name}`); return r.ok ? r.json() : null; };
+      const [man, boot, poc, obs] = await Promise.all([
+        get('replay_manifest.json'), get('boot.json'), get('poc_output.json'), get('observation.json')]);
+      this.manifest = man; this.boot = boot; this.pocOut = poc; this.observation = obs;
+      this.budget = man?.budget || null;
+      if (!this.observation && this.verdict){
+        // observation may exist only at terminal; fall back to a stub
+        this.observation = null;
+      }
+    },
+    async loadTab(t){
+      if (!t || !this.run) return;
+      this.tab = t.id; this.tabError = false; this.tabContent = 'loading…';
+      const r = await fetch(`/projects/${this.run.project_id}/evidence/${t.file}`);
+      if (!r.ok){ this.tabError = true; this.tabContent = 'not written yet'; return; }
+      try{ this.tabContent = JSON.stringify(await r.json(), null, 2); }
+      catch(e){ this.tabContent = await r.text(); }
+    },
+    async sendHint(){
+      const input = this.$refs.hint; const v = (input.value||'').trim(); if(!v) return;
+      await fetch(`/projects/${this.run.project_id}/hints`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({content: v, creator: 'human'})
+      });
+      input.value='';
+      await this.refreshRun();
+    },
+
+    // ---------------- polling ----------------
+    startPolling(){
+      clearInterval(this.timer);
+      this.timer = setInterval(async () => {
+        if (this.run){ if (this.verdict){ clearInterval(this.timer); return; } await this.refreshRun(); }
+        else await this.refreshOverview();
+      }, 2500);
+    },
+    async refreshOverview(){
+      try{
+        const r = await fetch('/verification/overview');
+        const data = await r.json();
+        this.overview = data.claims || [];
+      }catch(e){ /* transient */ }
+    },
+  };
+}
+</script>
+</body>
+</html>
