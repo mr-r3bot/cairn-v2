@@ -288,8 +288,7 @@ class BringUpService:
             claim_hint_ports={"extra": hint_ports},
             result=result,
             log_lines=log_lines,
-            aliases=None,  # "target" alias assigned to whichever service answers health
-            service_containers=services,
+            service_containers=services,  # "target" alias goes to whichever service answers health
         )
 
     def _boot_dockerfile(self, run_id: str, checkout: Path, result: BringUpResult, log_lines: list[str]) -> bool:
@@ -351,11 +350,12 @@ class BringUpService:
 
         host, port, http_status = healthy
         if service_containers and host != "target":
-            # pin the alias to the service that actually answered
+            # pin the alias to the service that actually answered (the
+            # endpoint was first attached under its compose service name)
             for container in service_containers:
                 service = container.labels.get("com.docker.compose.service") or container.name
                 if service == host:
-                    self.sandbox.attach(run_id, container, aliases=["target"])
+                    self.sandbox.attach(run_id, container, aliases=[service, "target"])
 
         result.endpoint = f"http://target:{port}"
         result.recipe.update({"endpoint": result.endpoint, "port": port, "http_status": http_status})
@@ -513,7 +513,7 @@ class BringUpService:
             argv,
             detach=True,
             volumes=volumes,
-            workdir=workdir,
+            working_dir=workdir,
             labels={"cairn.sandbox.run": "helper"},
         )
         deadline = time.monotonic() + timeout_s

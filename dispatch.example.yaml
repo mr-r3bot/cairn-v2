@@ -51,6 +51,44 @@ container:
   #   - "NET_RAW"
   #   - "NET_ADMIN"
 
+# Cairn v2 — independent PoC verification (claim → verdict).
+# The sandbox is Docker-native: per-run internal networks, read-only payload
+# containers, nonce collector as the only egress. See docs/specs/verification.md.
+verification:
+  enabled: true
+  # alias the booted target answers to on the run network
+  endpoint_alias: "target"
+  # evidence bundles live where the server can serve them: in docker-compose
+  # both containers share ./datas/cairn (server: /root/.local/share/cairn)
+  evidence_home: "/cairn-datas/evidence"
+  # helper images: compose/build driver, clone driver, health prober, PoC runtime
+  builder_image: "docker:cli"
+  git_image: "alpine/git"
+  probe_image: "python:3.13-slim"
+  poc_image: "python:3.13-slim"
+  healthcheck_timeout_s: 180
+  # candidate ports when the repo does not advertise one
+  health_ports: [8080, 8090, 3000, 80, 8000, 5000, 9000, 8888, 443]
+  budget:
+    wall_clock_s: 1800
+    max_steps: 60
+    max_payload_runs: 20
+    max_cost_usd: 5.0
+  sandbox:
+    # dispatcher-side root for sandbox data. When the dispatcher runs in a
+    # container (docker-compose), also set host_data_home to the HOST path of
+    # the same data — the Docker daemon resolves bind-mount sources, not the
+    # dispatcher. CAIRN_HOST_DATA comes from the compose environment (.env).
+    data_home: "/cairn-datas/sandbox"
+    host_data_home: "${CAIRN_HOST_DATA}/sandbox"
+    image: "python:3.13-slim"
+    collector_image: "python:3.13-slim"
+    collector_port: 9931
+    mem_mb: 512
+    pids_limit: 128
+    cpus: 1.0
+    payload_timeout_s: 120
+
 
 workers:
   # Worker priority is ascending: lower numbers are preferred first.

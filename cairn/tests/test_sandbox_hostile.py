@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -47,16 +49,19 @@ def docker_available() -> None:
 
 
 @pytest.fixture()
-def manager(tmp_path, docker_available) :
+def manager(docker_available):
     from cairn.sandbox import SandboxConfig, SandboxManager
 
     run_id = f"it-{uuid.uuid4().hex[:8]}"
+    # bind-mount sources must be daemon-visible: when the suite itself runs
+    # inside a container, use the host-shared root the runner mounts for us
+    shared = os.environ.get("CAIRN_IT_ROOT")
+    data_home = Path(shared) / f"hostile-{run_id}" if shared else Path(tempfile.mkdtemp(prefix="cairn-hostile-"))
     mgr = SandboxManager(
         SandboxConfig(
             image=IMAGE,
             collector_image=IMAGE,
-            scratch_root=tmp_path / "scratch",
-            hits_root=tmp_path / "hits",
+            data_home=data_home,
             mem_mb=256,
             pids_limit=32,
             payload_timeout_s=60,
@@ -233,7 +238,9 @@ def test_hostile_memory_hog_killed_by_cgroup_limit(manager) -> None:
 import json
 json.dump({"phase": "start"}, open("/scratch/result_mem.json", "w"))
 try:
-    blob = bytearray(600 * 1024 * 1024)  # zero-filled -> pages get touched
+    blob = bytearray(600 * 1024 * 1024)
+    for i in range(0, len(blob), 4096):  # touch every page: RSS must grow
+        blob[i] = 1
     json.dump({"phase": "ALLOCATED"}, open("/scratch/result_mem.json", "w"))
 except MemoryError:
     json.dump({"phase": "memoryerror"}, open("/scratch/result_mem.json", "w"))

@@ -123,9 +123,83 @@ library.
 
 ## Status
 
-- Phase 0 — claim ingestion: **done** (`POST /claims`, sealed PoCs,
-  claims table, 16 tests).
+All phases implemented and tested (see `cairn/tests/`):
+
+- Phase 0 — claim ingestion: **done** (`POST /claims`, sealed PoCs, claims
+  table). 
 - Phase 1 — sandbox core: **done** (internal networks, contained payload
-  execution, nonce collector, 10 unit + 5 hostile container tests).
-- Phases 2–8 — planned per `plan.md` (bring-up discovery, PoC harness,
-  oracle pack, verdict + evidence, handback, budgets, console, auto mode).
+  execution, nonce collector; hostile container suite proves the three
+  invariants).
+- Phase 2 — bring-up auto-discovery: **done** (ranked strategies: prebuilt
+  image, compose, Dockerfile executed through socket-driving helper
+  containers; make/script/README detected and recorded as dead-ends; health
+  probing on the run network; `target` alias pinned to the answering
+  service).
+- Phase 3 — PoC execution harness: **done** (script/http/command PoCs run
+  inside the sandbox; rc≠0 or timeout = `POC_ERROR`, never
+  `not_reproduced`).
+- Phase 4 — effect oracles: **done** (`rce/nonce-callback` and
+  `ssrf/nonce-callback` via `CAIRN_CMD`/`CAIRN_URL` instrumentation hooks;
+  `sqli/seeded-row` and `sentinel/planted-file` via `run_hints` hooks;
+  everything else leans `ambiguous`).
+- Phase 5 — verdict + evidence: **done** (conservative decision table;
+  server-side guardrail: `reproduced` without a marker is rejected,
+  exactly one terminal per project; replayable evidence bundle).
+- Phase 5.5 — Strix handback: **done** (shaped by sub-reason, carries the
+  replay manifest; `GET /projects/{id}/handback`, `GET /claims/{id}/handback`).
+- Phase 6 — budgets + stop conditions: **done** (wall-clock/steps/payload-
+  runs/cost ledger; stall detection; runs always terminate).
+- Phase 7 — console + export: **done** (`/verify` worklist + run console,
+  hint box as the only write surface; report / badge / exit-code /
+  evidence exporters).
+- Phase 8 — full-auto: **done** (`cairn auto --claim …`, sandbox guard,
+  exit codes 1/0/2).
+
+End-to-end tests (`test_verification_e2e.py`, real Docker) cover the five
+terminal outcomes against compose- and Dockerfile-shipping fixture targets:
+`reproduced` (nonce observed out-of-band), `not_reproduced`, `POC_ERROR`,
+`BRING_UP_FAILED`, `BUDGET_EXHAUSTED`.
+
+## Oracle contracts for PoC authors (Strix side)
+
+Effect-not-echo requires the PoC to be *parameterisable* — the oracle
+chooses the payload of the proof:
+
+- **rce / deserialization** — the PoC must execute the command in the
+  `CAIRN_CMD` environment variable on the target (this is the "attacker
+  command" the claimed RCE executes). Cairn sets it to a nonce beacon.
+- **ssrf** — the PoC must fetch the URL in `CAIRN_URL` through the target.
+- **sqli** — optional hooks: `run_hints.seed_command` runs inside the
+  target container with `{SEED}` replaced by a Cairn-chosen secret; the PoC
+  must return that exact value (env `CAIRN_SEED` carries it for reference).
+- **authbypass / pathtraversal** — optional hooks: `run_hints.plant_command`
+  (with `{NONCE}`) + `run_hints.sentinel_path`; the PoC must return the
+  planted content.
+- PoCs always run with `CAIRN_TARGET` (live endpoint) and
+  `CAIRN_COLLECTOR_URL` (the only egress) in their environment.
+
+A PoC that cannot honour the hook for its class still runs — the oracle
+leans `ambiguous` and the verdict stays `inconclusive`. Honest uncertainty
+beats a rubber stamp.
+
+## Deployment (Cairn in Docker)
+
+`docker-compose.yaml` runs server + dispatcher, both sharing `./datas/cairn`:
+
+- **server** mounts it at `/root/.local/share/cairn` (db + evidence).
+- **dispatcher** mounts it at `/cairn-datas` and talks to the Docker daemon
+  through the mounted socket; the verification section of `dispatch.yaml`
+  points `evidence_home`/`sandbox.data_home` at `/cairn-datas/...` and
+  `sandbox.host_data_home` at the **host-side** path of the same directory
+  (`CAIRN_HOST_DATA` from `.env`). The daemon — not the dispatcher —
+  resolves bind-mount sources; that duality is why both views exist.
+- Rootless-docker hosts: adjust the socket mount in compose
+  (`/run/user/<uid>/docker.sock`) and export `DOCKER_HOST` accordingly.
+
+## Testing
+
+- Docker-free: `uv run --project cairn --group dev pytest`
+- Everything in a container: `./test-in-docker.sh`
+- With container + e2e suites: `CAIRN_SANDBOX_INTEGRATION=1
+  ./test-in-docker.sh` (needs `python:3.13-slim`, `docker:cli`, `alpine/git`
+  images and a reachable Docker socket).

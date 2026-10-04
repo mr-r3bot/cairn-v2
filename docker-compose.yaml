@@ -30,6 +30,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./dispatch.yaml:/cairn/dispatch.yaml
+      # shared with cairn-server (./datas/cairn): evidence bundles, sandbox
+      # scratch/hits, pinned checkouts — read by both containers
+      - ./datas/cairn:/cairn-datas
+    environment:
+      # absolute HOST path of ./datas/cairn — the Docker daemon resolves
+      # bind-mount sources, so the v2 sandbox needs the host view.
+      # Set it in .env next to this file, e.g. CAIRN_HOST_DATA=/home/me/cairn/datas/cairn
+      - CAIRN_HOST_DATA=${CAIRN_HOST_DATA:-}
     depends_on:
       cairn-server:
         condition: service_healthy

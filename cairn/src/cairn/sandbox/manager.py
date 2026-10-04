@@ -115,10 +115,22 @@ class SandboxManager:
         return self.client.networks.create(name, internal=True, labels={_RUN_LABEL: run_id})
 
     def attach(self, run_id: str, container: Container | str, aliases: list[str] | None = None) -> None:
-        """Attach a container (e.g. the Phase 2 target) to the run network."""
+        """Attach a container (e.g. the Phase 2 target) to the run network.
+
+        Re-attaching with different aliases (e.g. pinning the ``target``
+        alias to the compose service that answered health) is supported:
+        the endpoint is disconnected first.
+        """
         network = self.ensure_network(run_id)
-        network.connect(container, aliases=aliases or [])
-        LOG.info("attached container=%s to sandbox network run=%s", container, run_id)
+        wanted = aliases or []
+        try:
+            network.connect(container, aliases=wanted)
+        except APIError as exc:
+            if "already exists" not in str(exc):
+                raise
+            network.disconnect(container)
+            network.connect(container, aliases=wanted)
+        LOG.info("attached container=%s to sandbox network run=%s aliases=%s", container, run_id, wanted)
 
     # ------------------------------------------------------------------
     # collector

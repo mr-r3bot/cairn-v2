@@ -286,16 +286,23 @@ class DispatchConfig(BaseModel):
 
 def _expand_verification_paths(config: DispatchConfig) -> None:
     """Expand $VARs in verification paths (docker deployments inject host dirs via env)."""
+
+    def expanded(value: Path | None) -> Path | None:
+        if value is None:
+            return None
+        text = os.path.expandvars(str(value))
+        if not text or "${" in text:  # unset/empty variable → treat as unset
+            return None
+        return Path(text)
+
+    from cairn.sandbox.config import DEFAULT_DATA_HOME
+
     sandbox = config.verification.sandbox
-    if sandbox.data_home is not None:
-        sandbox.data_home = Path(os.path.expandvars(str(sandbox.data_home)))
-    if sandbox.host_data_home is not None:
-        sandbox.host_data_home = Path(os.path.expandvars(str(sandbox.host_data_home)))
+    sandbox.data_home = expanded(sandbox.data_home) or DEFAULT_DATA_HOME
+    sandbox.host_data_home = expanded(sandbox.host_data_home)  # None → same as data_home
     verification = config.verification
-    if verification.evidence_home is not None:
-        verification.evidence_home = Path(os.path.expandvars(str(verification.evidence_home)))
-    if verification.checkout_home is not None:
-        verification.checkout_home = Path(os.path.expandvars(str(verification.checkout_home)))
+    verification.evidence_home = expanded(verification.evidence_home)
+    verification.checkout_home = expanded(verification.checkout_home)
 
 
 def _validate_optional_positive_int_env(worker_name: str, env: dict[str, str], key: str) -> None:

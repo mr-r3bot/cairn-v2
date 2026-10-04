@@ -71,6 +71,19 @@ def test_local_process_times_out_and_kills_within_grace() -> None:
     assert elapsed < 10  # killed on its own timeout, not the 30s outer backstop
 
 
+def _process_gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    # in containers PID 1 may not reap orphans fast; a zombie is dead
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return stat.rsplit(")", 1)[1].strip().startswith("Z")
+    except OSError:
+        return False
+
+
 def test_local_process_kill_terminates_child_process_group(tmp_path: Path) -> None:
     pid_file = tmp_path / "child.pid"
     script = f"sleep 30 & echo $! > {pid_file}; wait"
@@ -88,9 +101,7 @@ def test_local_process_kill_terminates_child_process_group(tmp_path: Path) -> No
     child_pid = int(pid_file.read_text().strip())
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        try:
-            os.kill(child_pid, 0)
-        except ProcessLookupError:
+        if _process_gone(child_pid):
             break
         time.sleep(0.1)
     else:

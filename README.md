@@ -202,6 +202,79 @@ Run the fast regression suite without Docker or live model endpoints:
 uv run --project cairn --group dev pytest
 ```
 
+The whole suite can also run inside a container (host stays clean):
+
+```bash
+./test-in-docker.sh                       # Docker-free suites
+CAIRN_SANDBOX_INTEGRATION=1 ./test-in-docker.sh   # + container/e2e suites (needs a docker socket)
+```
+
+---
+
+## Cairn v2 — Independent PoC Verification Engine
+
+Cairn v2 sits downstream of a hunter (e.g. [Strix](https://github.com/usestrix/strix)).
+A finding + PoC arrives as an **untrusted claim**; Cairn boots the target in a
+sandbox, executes the PoC, **independently observes the effect** (never the
+hunter's success string), and emits a conservative verdict with a replayable
+evidence bundle.
+
+```
+Ingest ─► Bring-up ─► Execute ─► Observe (oracle) ─► Verdict ─► Handback (on failure)
+(untrusted)  (auto)               (effect, not echo)
+```
+
+### Ingest a claim
+
+```bash
+curl -X POST :8000/claims -H 'content-type: application/json' -d '{
+  "source": "strix",
+  "target_repo": "apache/gravitino",
+  "target_commit": "<vulnerable commit sha>",
+  "poc": {"type": "script", "language": "python", "payload": "..."},
+  "vuln_class": "rce",
+  "strix_claimed_oracle": {"expect": "recorded, never trusted"}
+}'
+```
+
+The claim becomes a project: origin fact = the sealed claim (digest only),
+goal fact = the verification contract. `run_hints` become hints. The
+dispatcher walks the spine on the board — every stage is an intent concluded
+with a fact you can watch.
+
+### Verdicts
+
+`reproduced` (only when a Cairn-chosen nonce lands on the out-of-band
+collector — no marker, no upgrade), `not_reproduced` (booted, PoC ran clean,
+effect never fired), `inconclusive` with a sub-reason
+(`BRING_UP_FAILED | POC_ERROR | ORACLE_AMBIGUOUS | BUDGET_EXHAUSTED`).
+Failure hands back to Strix shaped by the sub-reason, with a replay manifest
+of the exact environment.
+
+### Console, exports, CI
+
+- `:8000/verify` — verification console (worklist + live run view, hint box
+  is the only write surface)
+- `GET /projects/{id}/verdict|report|badge.svg|exit-code|handback`
+- `GET /projects/{id}/evidence/{manifest|boot|poc_output|observation|collector_hits}.json`
+
+Full-auto (CI): `cairn auto --claim finding.json` → exit code `1` on
+`reproduced` (CI fails on a confirmed live vuln), `0` otherwise, `2` on
+operational failure. Refuses to run without the sandbox unless
+`--allow-no-sandbox`.
+
+### Containment (the sandbox is mandatory)
+
+Docker-native: per-run **internal** networks (no external route — the nonce
+collector is the only egress), read-only payload containers with a
+scratch-only writable path, dropped capabilities, no-new-privileges, and
+cgroup memory/pids/cpu caps. Bring-up drives `docker compose` / `docker
+build` through socket-mounted helper containers; the booted target joins the
+run network as `target`. See `docs/specs/verification.md` for the threat
+model, oracle contracts (`CAIRN_CMD` / `CAIRN_URL` hooks for Strix PoC
+authors), and deployment notes (incl. the `host_data_home` path duality when
+the dispatcher itself runs in a container).
+
 ## Disclaimer
 
 Cairn is a general-purpose problem-solving engine. Although it supports penetration testing, CTF solving, security assessment, and vulnerability research workflows, it is intended to be used only in environments where you have explicit authorization to operate.

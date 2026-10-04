@@ -43,6 +43,12 @@ class WorkerSelection:
 
 
 class DispatcherLoop:
+    # fallbacks for partially-constructed loops (tests build instances via
+    # __new__ to exercise single methods); __init__ always sets its own
+    claim_project_ids: set[str] = set()
+    _verification_pipeline: "VerificationPipeline | None" = None
+    _verification_state_registered: bool = False
+
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self.config = DispatchConfig.load(config_path)
@@ -61,7 +67,7 @@ class DispatcherLoop:
         self.worker_unhealthy_until: dict[str, float] = {}
         self.worker_rejected_until: dict[tuple[str, str, str], float] = {}
         self.claim_project_ids: set[str] = set()
-        self._verification_pipeline: VerificationPipeline | None = None
+        self._verification_pipeline = None
         self._verification_state_registered = False
         self._log_state: dict[str, tuple[int, str, tuple[object, ...]]] = {}
         self._cleanup_pending: set[str] = set()
