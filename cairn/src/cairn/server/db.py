@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS scoped_counters (
     value INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (project_id, kind)
 );
+
+CREATE TABLE IF NOT EXISTS claims (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    target_repo TEXT NOT NULL,
+    target_commit TEXT NOT NULL,
+    target_image TEXT,
+    vuln_class TEXT NOT NULL,
+    poc_digest TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO counters (name, value) VALUES ('claim', 0);
 """
 
 
