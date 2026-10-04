@@ -468,7 +468,7 @@ function console(){
           fetch('/projects/'+pid+'/claim').then(r => r.ok ? r.json() : null),
         ]);
         if (!project){ this.run = null; return; }
-        this.run = project.project; this.project = project; this.claim = claim;
+        this.run = { ...project.project, project_id: pid }; this.project = project; this.claim = claim;
         const vr = await fetch('/projects/'+pid+'/verdict');
         this.verdict = vr.ok ? await vr.json() : null;
         await Promise.all([this.loadEvents(), this.loadEvidence()]);
@@ -484,8 +484,8 @@ function console(){
         let title = 'fact', detail = d;
         const cut = d.indexOf(' — ');
         if (cut > 0){ title = d.slice(0, cut); detail = d.slice(cut+3); }
+        else if (d.includes('independent verdict')){ continue; }  // the goal fact is not an event
         else if (d.startsWith('[claim ')){ title = 'claim ingested'; }
-        else if (d.startsWith('[goal') || d.includes('independent verdict')){ continue; }
         evs.push({id: f.id, kind: 'fact', time: '', title, detail: detail.slice(0,160)});
       }
       for (const h of this.project.hints || [])
