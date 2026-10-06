@@ -1,0 +1,13 @@
+# keep docker build context small (compose builds cairn-app from this repo)
+.git
+.vscode
+.playwright-cli
+cairn/.venv
+cairn/tests
+cairn/.pytest_cache
+datas
+docs
+README
+*.md
+.env
+dispatch*.yaml

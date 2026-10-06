@@ -130,6 +130,13 @@ Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
 
 ## Getting Started
 
+**Quick start:** `./start.sh` detects your Docker socket (rootless or not),
+generates a verification-only `dispatch.yaml` if you don't have one, writes
+`.env`, pulls the helper images, and brings the stack up on
+<http://localhost:8000/verify>. See `./start.sh --help` for `--manual`
+(host processes, dispatcher-first), `stop`, and `status`. The rest of this
+section explains what it does under the hood.
+
 **Prerequisites**
  
 - macOS or Linux
