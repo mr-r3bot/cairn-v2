@@ -29,6 +29,7 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
 .seg{display:flex;border:1px solid var(--line-br);border-radius:7px;overflow:hidden}
 .seg button{background:transparent;border:0;color:var(--muted2);font-family:var(--sans);font-size:12.5px;padding:6px 12px;cursor:pointer}
 .seg button[aria-pressed=true]{background:#17262a;color:var(--text)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
 .btn{background:transparent;border:1px solid var(--line-br);color:var(--text);font-family:var(--sans);font-size:12.5px;padding:7px 12px;border-radius:7px;cursor:pointer;display:inline-block}
 .btn:hover{border-color:var(--live);color:#eafffb}
 .btn.go{border-color:#2d4b48;color:#bdfff4}
@@ -167,16 +168,19 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
 <div class="wrap" x-data="console()">
 
   <div class="top">
-    <div class="brand"><b>Cairn</b><span class="v">v2</span></div>
+    <a class="brand" href="/" title="Back to the worklist" style="display:flex;align-items:baseline;gap:10px;color:inherit;text-decoration:none"><b>Cairn</b><span class="v">v2</span></a>
     <div class="run" x-show="run">verify/ <b x-text="run?.title || run?.project_id"></b></div>
     <div class="sp"></div>
     <div class="seg" role="group" aria-label="view">
       <button :aria-pressed="!run && !ingest" @click="openRun(null)">Worklist</button>
-      <button :aria-pressed="!!run" @click="run && openRun(run.project_id)">Run console</button>
+      <button :aria-pressed="!!run" :disabled="!run" @click="openRun(run.project_id)"
+              :title="run ? 'Back to this run' : 'Pick a run from the worklist first'">Run console</button>
     </div>
     <button class="btn go" @click="openIngest()" x-text="ingest ? '✕ Close form' : '+ Ingest claim'"></button>
     <template x-if="run">
       <div style="display:flex;gap:8px">
+        <a class="btn" :href="'/graph#/projects/'+run.project_id" target="_blank"
+           title="Open this run's fact/intent board in the graph view">Graph</a>
         <a class="btn" :href="'/projects/'+run.project_id+'/report'" target="_blank">Export report</a>
         <a class="btn" :href="'/projects/'+run.project_id+'/handback'" target="_blank" x-show="verdict && verdict.status!=='reproduced'">Handback</a>
       </div>
@@ -487,7 +491,7 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
     </div>
   </template>
 
-  <div class="foot">Cairn v2 — verification console · verdicts are conservative: anything unproven stays inconclusive · <a href="/" style="text-decoration:underline">v1 graph console</a></div>
+  <div class="foot">Cairn v2 — verification console · verdicts are conservative: anything unproven stays inconclusive · <a href="/graph" style="text-decoration:underline">graph view</a> — debug lens over the fact/intent board</div>
 </div>
 
 <script src="/static/vendor/alpine.min.js" defer></script>

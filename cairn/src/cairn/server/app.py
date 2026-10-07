@@ -36,12 +36,19 @@ app.include_router(export.router)
 
 @app.get("/", include_in_schema=False)
 def index():
+    """Cairn v2 verification console is the product front page."""
+    return FileResponse(STATIC_DIR / "verify.html")
+
+
+@app.get("/graph", include_in_schema=False)
+def graph_console():
+    """v1 fact/intent graph view — debug lens over any project's board."""
     return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/verify", include_in_schema=False)
 def verify_console():
-    """Cairn v2 verification console (worklist + single-run views)."""
+    """Alias of / (kept for bookmarks)."""
     return FileResponse(STATIC_DIR / "verify.html")
 
 

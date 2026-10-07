@@ -133,7 +133,7 @@ Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
 **Quick start:** `./start.sh` detects your Docker socket (rootless or not),
 generates a verification-only `dispatch.yaml` if you don't have one, writes
 `.env`, pulls the helper images, and brings the stack up on
-<http://localhost:8000/verify>. See `./start.sh --help` for `--manual`
+<http://localhost:8000/> (the v2 verification console). See `./start.sh --help` for `--manual`
 (host processes, dispatcher-first), `stop`, and `status`. The rest of this
 section explains what it does under the hood.
 
@@ -193,8 +193,9 @@ docker compose up --build
 This starts `cairn-server` on port `8000` and `cairn-dispatcher` once the
 server passes its health check. The dispatcher mounts `dispatch.yaml` from
 the project root and connects to Docker via the host socket. Data is
-persisted to `./datas/cairn/`. Consoles: the v1 graph console on `/` and the
-**v2 verification console on `/verify`**.
+persisted to `./datas/cairn/`. Consoles: the **v2 verification console on
+`/`** (the product front page); the v1 fact/intent graph view remains at
+`/graph` as a debug lens over the board.
 
 Rootless-Docker hosts: change the dispatcher's socket mount to your
 rootless socket (e.g. `/run/user/<uid>/docker.sock`) and export
@@ -237,7 +238,7 @@ verification:
 ```
 
 Start the server, start the dispatcher, then `POST /claims` (or run
-`cairn auto`) and watch `/verify`.
+`cairn auto`) and watch the console on `/`.
 
 ### Local mode (no Docker)
 
@@ -314,8 +315,7 @@ of the exact environment.
 
 ### Console, exports, CI
 
-- `:8000/verify` — verification console (worklist + live run view, hint box
-  is the only write surface)
+- `:8000/` — verification console (worklist + live run view, hint box as the only write surface; alias `/verify`, graph debug view at `/graph`)
 - `GET /projects/{id}/verdict|report|badge.svg|exit-code|handback`
 - `GET /projects/{id}/evidence/{manifest|boot|poc_output|observation|collector_hits}.json`
 
