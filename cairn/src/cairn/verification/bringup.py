@@ -543,7 +543,7 @@ class BringUpService:
                 self._container = None
 
             def __enter__(self):
-                self._container = self._outer._client.containers.run(
+                self._container = self._outer.client.containers.run(
                     image,
                     ["sleep", "infinity"],
                     name=name,

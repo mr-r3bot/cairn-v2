@@ -146,6 +146,21 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
 .quiet i{width:9px;height:9px;border-radius:2px;background:var(--clear)}
 .foot{margin-top:26px;color:var(--faint);font-size:12px;text-align:center}
 .err{color:var(--repro);font-family:var(--mono);font-size:12.5px;padding:10px}
+/* ingest form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+.fgrid .full{grid-column:1/-1}
+.field .k{font-size:11.5px;color:var(--faint);margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%;background:var(--well);border:1px solid var(--line-br);border-radius:7px;color:var(--text);font-family:var(--mono);font-size:12.5px;padding:8px 10px}
+.field textarea{min-height:96px;resize:vertical;line-height:1.5}
+.field select{appearance:auto}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--live)}
+.formerr{white-space:pre-wrap;font-family:var(--mono);font-size:12px;color:var(--repro);background:#1a0f0d;border:1px solid #5a2b20;border-radius:8px;padding:10px 12px;margin-top:12px}
+/* operator hints */
+.fhint{display:flex;gap:7px;font-size:11.5px;color:var(--muted2);margin-top:5px;line-height:1.45}
+.fhint b{color:var(--incon);font-weight:700;flex:none}
+.flowstrip{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted2);
+  background:var(--well);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:16px}
+.flowstrip .fs{color:var(--live)}
 </style>
 </head>
 <body>
@@ -156,9 +171,10 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
     <div class="run" x-show="run">verify/ <b x-text="run?.title || run?.project_id"></b></div>
     <div class="sp"></div>
     <div class="seg" role="group" aria-label="view">
-      <button :aria-pressed="!run" @click="openRun(null)">Worklist</button>
+      <button :aria-pressed="!run && !ingest" @click="openRun(null)">Worklist</button>
       <button :aria-pressed="!!run" @click="run && openRun(run.project_id)">Run console</button>
     </div>
+    <button class="btn go" @click="openIngest()" x-text="ingest ? '✕ Close form' : '+ Ingest claim'"></button>
     <template x-if="run">
       <div style="display:flex;gap:8px">
         <a class="btn" :href="'/projects/'+run.project_id+'/report'" target="_blank">Export report</a>
@@ -167,11 +183,134 @@ h2.sec{font-size:14px;font-weight:600;margin:0 0 2px}
     </template>
   </div>
 
+  <!-- ================= INGEST CLAIM ================= -->
+  <template x-if="ingest">
+    <div class="panel pad" style="margin-top:20px">
+      <h2 class="sec">Ingest an untrusted claim</h2>
+      <div class="ey" style="margin:2px 0 10px">Paste or describe a finding you want independently verified. Nothing here is trusted until Cairn proves the effect itself.</div>
+
+      <div class="flowstrip">
+        <span class="fs">① you paste the claim</span> →
+        <span class="fs">② Cairn boots the target in a sandbox</span> →
+        <span class="fs">③ runs your PoC against it</span> →
+        <span class="fs">④ watches for its own proof signal</span> →
+        <span class="fs">⑤ verdict + report</span>
+        <span style="margin-left:auto;color:var(--faint)">— you can watch every step live on the run console</span>
+      </div>
+      <div class="fhint"><b>( ! )</b><span>This claim is <i>unverified input</i>: the PoC is sealed to a digest on the board, and any "success string" the hunter claimed is recorded for audit only — <b>never</b> used as proof. Only a Cairn-chosen marker observed out-of-band can produce <i>reproduced</i>.</span></div>
+
+      <div class="seg" role="group" aria-label="claim input mode" style="margin-bottom:14px">
+        <button :aria-pressed="ingestTab==='guided'" @click="ingestTab='guided'">Guided</button>
+        <button :aria-pressed="ingestTab==='raw'" @click="ingestTab='raw'">Raw JSON</button>
+      </div>
+
+      <template x-if="ingestTab==='guided'">
+        <div>
+          <div class="fgrid">
+            <div class="field"><div class="k">Source</div>
+              <input x-model="iform.source" placeholder="strix"></div>
+            <div class="field"><div class="k">Vuln class</div>
+              <select x-model="iform.vuln_class">
+                <template x-for="c in ['rce','sqli','ssrf','authbypass','pathtraversal','xss','file-upload','deserialization','other']" :key="c">
+                  <option :value="c" x-text="c"></option>
+                </template>
+              </select>
+              <div class="fhint"><b>( ! )</b><span>Chooses <b>how Cairn proves the effect</b>: rce/deser → nonce beacon via <span class="mono">CAIRN_CMD</span>; ssrf → forced fetch via <span class="mono">CAIRN_URL</span>; sqli/authbypass/pathtraversal → seeded/sentinel hooks (need run hints, else honestly <i>inconclusive</i>); xss/other → human review.</span></div></div>
+            <div class="field full"><div class="k">Target repo (owner/name)</div>
+              <input x-model="iform.target_repo" placeholder="apache/gravitino">
+              <div class="fhint"><b>( ! )</b><span>The project that ships the vulnerability — GitHub style <span class="mono">owner/name</span>. Cairn clones this repo and finds out by itself how to boot it.</span></div></div>
+            <div class="field"><div class="k">Target commit (7-40 hex sha)</div>
+              <input x-model="iform.target_commit" placeholder="a1b2c3d…">
+              <div class="fhint"><b>( ! )</b><span>Pin the <b>exact</b> vulnerable commit — a verdict against the wrong version is meaningless.</span></div></div>
+            <div class="field"><div class="k">Target image (optional, prebuilt)</div>
+              <input x-model="iform.target_image" placeholder="registry/app:1.0">
+              <div class="fhint"><b>( ! )</b><span>Leave empty to let Cairn boot from the repo (compose / Dockerfile). Fill in to skip repo boot and run this image directly.</span></div></div>
+
+            <div class="field full"><div class="k">PoC type</div>
+              <select x-model="iform.pocType">
+                <option value="script">script</option>
+                <option value="http">http</option>
+                <option value="command">command</option>
+              </select>
+              <div class="fhint"><b>( ! )</b><span>How the PoC reaches the target: a <b>script</b> that runs inside the sandbox, a raw <b>HTTP</b> request, or a plain <b>command</b> (argv).</span></div></div>
+
+            <template x-if="iform.pocType==='script'">
+              <div class="field full"><div class="k">Script language</div>
+                <select x-model="iform.pocLang"><option value="bash">bash</option><option value="sh">sh</option><option value="python">python</option></select></div>
+            </template>
+            <template x-if="iform.pocType==='script'">
+              <div class="field full"><div class="k">PoC payload (sealed on the board; runs with CAIRN_TARGET, CAIRN_CMD, CAIRN_COLLECTOR_URL)</div>
+                <textarea x-model="iform.pocPayload" placeholder='python3 -c "import os,urllib.request; urllib.request.urlopen(os.environ[&#39;CAIRN_TARGET&#39;])"&#10;eval "$CAIRN_CMD"'></textarea>
+                <div class="fhint"><b>( ! )</b><span>Runs inside the sandbox against the live target. Env vars you can use: <span class="mono">CAIRN_TARGET</span> (the booted target's URL), <span class="mono">CAIRN_CMD</span> (for RCE PoCs — execute this on the target; it carries Cairn's proof beacon), <span class="mono">CAIRN_URL</span> (for SSRF — fetch this through the target), <span class="mono">CAIRN_COLLECTOR_URL</span> (the only allowed outbound address).</span></div></div>
+            </template>
+
+            <template x-if="iform.pocType==='http'">
+              <div class="field"><div class="k">Method</div>
+                <select x-model="iform.httpMethod"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></div>
+            </template>
+            <template x-if="iform.pocType==='http'">
+              <div class="field"><div class="k">URL ({TARGET} → live endpoint)</div>
+                <input x-model="iform.httpUrl" placeholder="{TARGET}/api/connectors"></div>
+            </template>
+            <template x-if="iform.pocType==='http'">
+              <div class="field full"><div class="k">Headers (one key: value per line)</div>
+                <textarea x-model="iform.httpHeaders" rows="2" placeholder="Content-Type: application/json"></textarea></div>
+            </template>
+            <template x-if="iform.pocType==='http'">
+              <div class="field full"><div class="k">Body (optional)</div>
+                <textarea x-model="iform.httpBody" placeholder='{"config": {"command": "…"}}'></textarea></div>
+            </template>
+
+            <template x-if="iform.pocType==='command'">
+              <div class="field full"><div class="k">argv (one argument per line)</div>
+                <textarea x-model="iform.cmdArgs" placeholder="curl&#10;-s&#10;http://target:8080/"></textarea></div>
+            </template>
+
+            <div class="field full"><div class="k">Run hints (optional, one key: value per line; JSON values allowed)</div>
+              <textarea x-model="iform.runHints" rows="2" placeholder="port: 8090&#10;profile: &quot;playground&quot;"></textarea>
+              <div class="fhint"><b>( ! )</b><span>Optional steering for the boot step, e.g. <span class="mono">port: 8090</span> (which port to health-check), <span class="mono">checkout_dir: /path/to/repo</span> (use a local checkout instead of cloning), <span class="mono">repo_url: …</span> (clone from a mirror). Unknown keys are ignored, not errors.</span></div></div>
+            <div class="field full"><div class="k">Strix claimed oracle (optional JSON, audit only — never proof)</div>
+              <textarea x-model="iform.oracle" rows="2" placeholder='{&quot;expect_stdout&quot;: &quot;uid=0&quot;}'></textarea>
+              <div class="fhint"><b>( ! )</b><span>What the hunter <i>claimed</i> success looks like. Stored with the evidence for audit — Cairn never reads it as proof, so filling this in cannot influence the verdict.</span></div></div>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="ingestTab==='raw'">
+        <div class="field full"><div class="k">Claim JSON (schema: source, target_repo, target_commit, target_image?, run_hints, poc, vuln_class, strix_claimed_oracle)</div>
+          <div class="fhint" style="margin:0 0 6px"><b>( ! )</b><span>Exactly what <span class="mono">POST /claims</span> accepts — paste a Strix finding export as-is. Validation errors come back field by field.</span></div>
+          <textarea x-model="rawClaim" style="min-height:220px" placeholder='{
+  "source": "strix",
+  "target_repo": "apache/gravitino",
+  "target_commit": "…",
+  "poc": {"type": "script", "language": "bash", "payload": "…"},
+  "vuln_class": "rce",
+  "strix_claimed_oracle": {}
+}'></textarea></div>
+      </template>
+
+      <div class="formerr" x-show="ingestError" x-text="ingestError"></div>
+      <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+        <button class="btn go" @click="submitIngest()" :disabled="ingestBusy" x-text="ingestBusy ? 'Ingesting…' : 'Ingest claim → start verification'"></button>
+        <span class="ey">lands on the new run's console; the dispatcher picks it up on its next tick</span>
+      </div>
+      <div class="fhint" style="margin-top:12px"><b>( ! )</b><span>What happens next: the dispatcher boots the pinned target in an isolated network (no internet), fires your PoC from a locked-down container, and only decides <i>reproduced</i> if its own beacon comes back. If it can't boot or the PoC crashes, you get a <i>handback</i> explaining exactly what to fix — not a silent failure.</span></div>
+    </div>
+  </template>
+
   <!-- ================= WORKLIST ================= -->
-  <template x-if="!run">
+  <template x-if="!run && !ingest">
     <div>
       <p class="ey" style="margin:14px 0 0;max-width:76ch">Auto mode runs the loop unattended: Strix findings are ingested, verified against a
       live sandboxed instance, and only the negatives reach you. The goal-met ones close on their own.</p>
+
+      <div class="panel pad" x-show="!overview.length" style="margin-top:16px;display:flex;gap:14px;align-items:center">
+        <span style="font-size:26px">🗒️</span>
+        <div>
+          <b>No claims yet.</b>
+          <div class="ey" style="margin-top:2px">Click <b>+ Ingest claim</b> above to verify your first finding — the form explains every field as you go.</div>
+        </div>
+      </div>
 
       <div class="chips">
         <div class="chip"><span class="dotc" style="background:var(--strix)"></span><span class="num" x-text="counts.queued"></span><span class="cl">from Strix, not started</span></div>
@@ -359,6 +498,13 @@ function console(){
     events: [], tab: 'obs', tabContent: '', tabError: false, budget: null,
     manifest: null, boot: null, pocOut: null, observation: null,
     timer: null,
+    ingest: false, ingestTab: 'guided', ingestBusy: false, ingestError: '', rawClaim: '',
+    iform: {
+      source: 'strix', target_repo: '', target_commit: '', target_image: '', vuln_class: 'rce',
+      pocType: 'script', pocLang: 'bash', pocPayload: '',
+      httpMethod: 'GET', httpUrl: '', httpHeaders: '', httpBody: '',
+      cmdArgs: '', runHints: '', oracle: '',
+    },
     tabs: [
       {id:'obs', label:'Observation', file:'observation.json'},
       {id:'boot', label:'Boot recipe', file:'boot.json'},
@@ -406,6 +552,91 @@ function console(){
       if (f.startsWith('BRING-UP OK')) return 'booted';
       if (f.startsWith('BRING-UP FAILED')) return 'boot failed';
       return 'starting';
+    },
+
+    // ---------------- ingest ----------------
+    openIngest() {
+      this.ingest = !this.ingest;
+      this.ingestError = '';
+      if (this.ingest) { this.run = null; history.replaceState(null, '', location.pathname); }
+    },
+
+    _kvLines(text) {
+      const out = {};
+      for (const line of (text || '').split('\n')) {
+        const m = line.match(/^([^:]+):\s*(.*)$/);
+        if (!m) continue;
+        let value = m[2].trim();
+        try { value = JSON.parse(value); } catch (e) { /* plain string */ }
+        out[m[1].trim()] = value;
+      }
+      return out;
+    },
+
+    buildClaim() {
+      const f = this.iform;
+      if (!f.target_repo.trim()) throw new Error('target repo is required');
+      if (!f.target_commit.trim()) throw new Error('target commit is required');
+      let poc;
+      if (f.pocType === 'script') {
+        if (!f.pocPayload.trim()) throw new Error('PoC payload is required');
+        poc = { type: 'script', language: f.pocLang, payload: f.pocPayload };
+      } else if (f.pocType === 'http') {
+        if (!f.httpUrl.trim()) throw new Error('PoC URL is required');
+        poc = { type: 'http', method: f.httpMethod, url: f.httpUrl,
+                headers: this._kvLines(f.httpHeaders),
+                body: f.httpBody.trim() ? f.httpBody : null };
+      } else {
+        const argv = f.cmdArgs.split('\n').map(s => s.trim()).filter(Boolean);
+        if (!argv.length) throw new Error('at least one argv line is required');
+        poc = { type: 'command', argv };
+      }
+      let strix_claimed_oracle = {};
+      if (f.oracle.trim()) {
+        try { strix_claimed_oracle = JSON.parse(f.oracle); }
+        catch (e) { throw new Error('Strix claimed oracle is not valid JSON: ' + e.message); }
+      }
+      const claim = {
+        source: f.source.trim() || 'strix',
+        target_repo: f.target_repo.trim(),
+        target_commit: f.target_commit.trim(),
+        run_hints: this._kvLines(f.runHints),
+        poc, vuln_class: f.vuln_class, strix_claimed_oracle,
+      };
+      if (f.target_image.trim()) claim.target_image = f.target_image.trim();
+      return claim;
+    },
+
+    _formatApiError(status, detail) {
+      if (Array.isArray(detail)) {
+        return detail.map(d => `${(d.loc || []).slice(1).join('.') || 'body'}: ${d.msg}`).join('\n');
+      }
+      if (typeof detail === 'string') return detail;
+      return JSON.stringify(detail);
+    },
+
+    async submitIngest() {
+      this.ingestBusy = true; this.ingestError = '';
+      try {
+        const body = this.ingestTab === 'raw' ? JSON.parse(this.rawClaim) : this.buildClaim();
+        const r = await fetch('/claims', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({ detail: `HTTP ${r.status}` }));
+          this.ingestError = this._formatApiError(r.status, data.detail);
+          return;
+        }
+        const data = await r.json();
+        this.ingest = false;
+        await this.refreshOverview();
+        this.openRun(data.project_id);
+      } catch (e) {
+        this.ingestError = e.message;
+      } finally {
+        this.ingestBusy = false;
+      }
     },
 
     // ---------------- run console ----------------

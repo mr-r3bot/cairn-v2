@@ -188,3 +188,6 @@ def test_verify_console_page_served(client: TestClient):
     assert response.status_code == 200
     assert "alpine.min.js" in response.text
     assert "verification/overview" in response.text
+    # claim ingestion UI: operators never need curl to start a run
+    assert "Ingest an untrusted claim" in response.text
+    assert "iform" in response.text  # guided form state shipped with the page

@@ -94,6 +94,22 @@ def test_checkout_hint_must_exist(tmp_path, sandbox, config):
         service.ensure_checkout("r1", {"run_hints": {"checkout_dir": str(tmp_path / "nope")}})
 
 
+def test_bringup_client_is_lazy_from_sandbox(config):
+    """Regression: helpers (git clone etc.) must resolve the docker client via
+    the lazy property — a pipeline-constructed service has client=None until
+    first use, and raw attribute access made every real claim crash at clone."""
+    sentinel = object()
+
+    class SB:
+        @property
+        def client(self):
+            return sentinel
+
+    service = BringUpService(SB(), config)
+    assert service._client is None  # nothing eager at construction
+    assert service.client is sentinel
+
+
 # =====================================================================
 # Phase 3 — PoC building
 # =====================================================================

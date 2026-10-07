@@ -151,7 +151,10 @@ All phases implemented and tested (see `cairn/tests/`):
   runs/cost ledger; stall detection; runs always terminate).
 - Phase 7 — console + export: **done** (`/verify` worklist + run console,
   hint box as the only write surface; report / badge / exit-code /
-  evidence exporters).
+  evidence exporters). The console also **ingests claims** (guided form +
+  raw JSON → `POST /claims`): creating a new run is a public-API write,
+  distinct from the mid-run single-writer surface, so operators never
+  need curl to start a verification.
 - Phase 8 — full-auto: **done** (`cairn auto --claim …`, sandbox guard,
   exit codes 1/0/2).
 
